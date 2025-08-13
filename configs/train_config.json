@@ -1,0 +1,23 @@
+{
+  "model_name": "bangla-speech-processing/bangla_tts_female",
+  "output_dir": "artifacts/checkpoints",
+  "learning_rate": 0.0001,
+  "batch_size": 8,
+  "eval_steps": 200,
+  "save_steps": 500,
+  "max_steps": 10000,
+  "warmup_steps": 1000,
+  "gradient_accumulation_steps": 4,
+  "mixed_precision": "fp16",
+  "seed": 42,
+  "train_manifest": "data/processed/train_manifest.jsonl",
+  "valid_manifest": "data/processed/valid_manifest.jsonl",
+  "sample_rate": 22050,
+  "text_cleaner": "bd_text_normalize",
+  "freeze_until_step": 2000,
+  "unfreeze_schedule": [
+    3000,
+    6000
+  ],
+  "accent_clf_path": "artifacts/accent_clf/model.joblib"
+}

@@ -1,0 +1,77 @@
+# -----------------------
+# Python cache / build
+# -----------------------
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+*.egg
+*.egg-info/
+build/
+dist/
+
+# -----------------------
+# Virtual environment
+# -----------------------
+.venv/
+env/
+venv/
+ENV/
+*.env
+*.venv
+
+# -----------------------
+# OS / editor files
+# -----------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# -----------------------
+# Audio / datasets
+# -----------------------
+data/raw/
+data/openslr53_raw/
+data/common_voice/
+data/processed/
+data/openslr53/
+*.mp3
+*.wav
+*.flac
+*.tar
+*.zip
+*.gz
+*.bz2
+
+# -----------------------
+# Model checkpoints
+# -----------------------
+runs/
+checkpoints/
+*.pth
+*.ckpt
+*.bin
+*.pt
+*.onnx
+*.pb
+
+# -----------------------
+# Outputs / logs
+# -----------------------
+baseline_out/
+out_ab/
+logs/
+*.log
+*.tmp
+
+# -----------------------
+# Reports / temporary
+# -----------------------
+*.ipynb_checkpoints
+REPORT*.pdf
+REPORT*.md~
+EXPERIMENTS*.md~

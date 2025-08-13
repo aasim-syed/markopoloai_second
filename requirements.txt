@@ -1,0 +1,20 @@
+# Core
+torch
+torchaudio
+transformers
+datasets
+accelerate
+numpy
+scipy
+librosa
+phonemizer
+espeakng
+coqpit
+# Optional / monitoring
+wandb
+tensorboard
+matplotlib
+# Demo
+gradio
+# Classical ML
+scikit-learn
