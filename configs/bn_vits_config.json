@@ -1,0 +1,27 @@
+{
+  "model": "vits",
+  "run_name": "bn_vits_finetune",
+  "batch_size": 8,
+  "eval_batch_size": 8,
+  "num_loader_workers": 2,
+  "num_eval_loader_workers": 2,
+  "epochs": 50,
+  "mixed_precision": true,
+  "optimizer": "adam",
+  "optimizer_params": { "lr": 1e-4 },
+  "lr_scheduler": "warmupinversesqrt",
+  "lr_scheduler_params": { "warmup_steps": 1000 },
+  "use_wandb": false,
+  "phoneme_cache_path": ".phonemizer",
+  "use_phonemes": true,
+  "phoneme_language": "bn",
+  "text_cleaner": "multilingual_cleaners",
+  "dataset_config": {
+    "formatter": "ljspeech",
+    "path": ".",
+    "meta_file_train": "data/processed/train_metadata.csv",
+    "meta_file_val": "data/processed/valid_metadata.csv"
+  },
+  "output_path": "runs/bn_vits",
+  "audio": { "sample_rate": 22050 }
+}
