@@ -1,28 +1,38 @@
-import gradio as gr, torch
+﻿import gradio as gr
+import torch
 from transformers import VitsModel, AutoTokenizer
+from ..utils.text import bd_text_normalize
 
-model = VitsModel.from_pretrained("bangla-speech-processing/bangla_tts_female")
-tok = AutoTokenizer.from_pretrained("bangla-speech-processing/bangla_tts_female")
+model = None
+tok = None
+
+def load_model():
+    global model, tok
+    if model is None:
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        model = VitsModel.from_pretrained('facebook/mms-tts-ben').to(device).eval()
+        tok = AutoTokenizer.from_pretrained('facebook/mms-tts-ben')
+    return model, tok
 
 def bd_tts_interface(text: str):
-    inputs = tok(text, return_tensors="pt")
+    m, tokenizer = load_model()
+    text = bd_text_normalize(text)
+    inputs = tokenizer([text], return_tensors='pt').to(next(m.parameters()).device)
     with torch.no_grad():
-        audio = model.generate(**inputs).squeeze(0).cpu().numpy()
-    return (22050, audio)
+        out = m(**inputs)
+    if hasattr(out, 'waveform'):
+        sr = getattr(m.config, 'sampling_rate', 22050)
+        wav = out.waveform.squeeze(0).cpu().numpy()
+        return (sr, wav)
+    else:
+        return (22050, None)
 
-examples = [
-    "আমি বাংলাদেশ থেকে এসেছি।",
-    "ঢাকা শহরে অনেক মানুষ বাস করে।",
-    "আজকে আবহাওয়া খুবই সুন্দর।"
-]
+with gr.Blocks() as demo:
+    gr.Markdown('# Bangladeshi Bengali TTS — Demo (MMS, no Coqui)')
+    inp = gr.Textbox(label='Bengali Text (Bangladeshi Style)', value='আমি বাংলাদেশ থেকে এসেছি।')
+    out = gr.Audio(label='Generated Speech', type='numpy')
+    btn = gr.Button('Synthesize')
+    btn.click(bd_tts_interface, inputs=inp, outputs=out)
 
-demo = gr.Interface(
-    fn=bd_tts_interface,
-    inputs=gr.Textbox(label="Bengali Text (Bangladeshi Style)"),
-    outputs=gr.Audio(label="Generated Speech", type="numpy"),
-    title="Bangladeshi Bengali TTS",
-    examples=examples,
-)
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     demo.launch()

@@ -1,20 +1,27 @@
 # Core
-torch
-torchaudio
-transformers
-datasets
-accelerate
-numpy
-scipy
-librosa
-phonemizer
-espeakng
-coqpit
-# Optional / monitoring
-wandb
-tensorboard
-matplotlib
-# Demo
-gradio
-# Classical ML
-scikit-learn
+torch>=2.8.0
+torchaudio>=2.8.0
+transformers>=4.41.0
+accelerate>=0.33.0
+numpy>=1.24.0
+pandas>=2.0.0
+pyyaml>=6.0
+
+# Audio / DSP
+librosa>=0.10.1
+soundfile>=0.12.1
+phonemizer>=3.2.1
+scipy>=1.10.0
+
+# ML utils
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+seaborn>=0.13.0
+
+# HF + monitoring
+datasets>=2.19.0
+huggingface_hub>=0.23.0
+wandb>=0.16.0
+tensorboard>=2.14.0
+
+gradio>=4.36.0

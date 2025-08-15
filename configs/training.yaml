@@ -1,0 +1,33 @@
+seed: 42
+project_name: bd_bangla_tts
+
+# Optim / schedule
+learning_rate: 1.0e-4
+batch_size: 16
+num_epochs: 20
+warmup_steps: 1000
+gradient_accumulation_steps: 4
+mixed_precision: true
+save_strategy: steps
+save_steps: 500
+eval_steps: 100
+max_steps: null
+
+# Progressive unfreezing schedule (epochs when to unfreeze blocks)
+progressive_unfreeze:
+  - { module: 'vits.text_encoder', epoch: 0 }
+  - { module: 'vits.duration_predictor', epoch: 2 }
+  - { module: 'vits.generator', epoch: 4 }
+  - { module: 'adapter', epoch: 0 }
+
+# Paths
+output_dir: outputs/tts
+log_dir: outputs/logs
+checkpoint_dir: outputs/checkpoints
+accent_clf_ckpt: outputs/accent_clf/random_forest.joblib
+
+# WandB
+wandb:
+  enabled: true
+  entity: null
+  project: bd_bangla_tts
