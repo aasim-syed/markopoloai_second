@@ -44,4 +44,4 @@ class BDVitsModel(nn.Module):
         return mel, logits_disc
 
     def tokenize(self, texts: list):
-        return self.tokenizer(texts, return_tensors='pt', padding=True, truncation
+        return self.tokenizer(texts, return_tensors='pt', padding=True, truncation=True)
