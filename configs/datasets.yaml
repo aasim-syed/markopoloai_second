@@ -1,6 +1,6 @@
 # Manifests produced by scripts in src/data/*.py
-train_manifest: data/processed/train_manifest.jsonl
-valid_manifest: data/processed/valid_manifest.jsonl
+train_manifest: data/processed/train_bd.jsonl
+valid_manifest: data/processed/valid_bd.jsonl
 # Optional baseline (mixed accent) for comparison
 baseline_manifest: data/processed/valid_mixed.jsonl
 
@@ -14,5 +14,5 @@ hop_length: 256
 win_length: 1024
 
 # Tokenization / phonemes
-use_phonemes: true
+use_phonemes: false
 phonemizer_lang: bn

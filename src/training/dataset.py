@@ -1,38 +1,58 @@
+import json
+from dataclasses import dataclass
+from typing import List, Dict
 import torch
-import torchaudio
-from src.common.utils import load_jsonl
-from src.model.text_normalize import bd_text_normalize
-from transformers import AutoTokenizer
+from torch.utils.data import Dataset
+from ..utils.audio import load_audio, melspectrogram, MelConfig
+from ..utils.text import to_phonemes
 
-class TTSDataset(torch.utils.data.Dataset):
-    def __init__(self, manifest_path, tokenizer_name="bangla-speech-processing/bangla_tts_female", sample_rate=22050):
-        self.rows = list(load_jsonl(manifest_path))
-        self.sr = sample_rate
-        self.tok = AutoTokenizer.from_pretrained(tokenizer_name)
+@dataclass
+class TTSItem:
+    audio: str
+    text: str
+    sr: int
+
+class TTSDataset(Dataset):
+    def __init__(self, manifest_path: str, mel_cfg: MelConfig, use_phonemes: bool = True):
+        self.items: List[TTSItem] = []
+        with open(manifest_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                j = json.loads(line)
+                self.items.append(TTSItem(j['audio'], j['text'], j.get('sr', mel_cfg.sample_rate)))
+        self.mel_cfg = mel_cfg
+        self.use_phonemes = use_phonemes
 
     def __len__(self):
-        return len(self.rows)
+        return len(self.items)
 
     def __getitem__(self, idx):
-        row = self.rows[idx]
-        wav, sr = torchaudio.load(row["audio"])
-        if sr != self.sr:
-            wav = torchaudio.functional.resample(wav, sr, self.sr)
-        text = bd_text_normalize(row["text"])
-        tok = self.tok(text, return_tensors="pt")
+        it = self.items[idx]
+        y = load_audio(it.audio, sr=self.mel_cfg.sample_rate)
+        mel = melspectrogram(y, self.mel_cfg)  # [n_mels, T]
+        text = to_phonemes(it.text) if self.use_phonemes else it.text
         return {
-            "audio": wav.squeeze(0),  # [T]
-            "input_ids": tok["input_ids"].squeeze(0),
-            "attention_mask": tok["attention_mask"].squeeze(0)
+            'text': text,
+            'mel': torch.tensor(mel, dtype=torch.float32),  # [n_mels, T]
+            'sr': self.mel_cfg.sample_rate
         }
 
-def collate(batch):
-    # Very simple padder; for production use smarter padding/bucketing.
-    import torch.nn.utils.rnn as rnn
-    audios = [b["audio"] for b in batch]
-    max_len = max(a.shape[-1] for a in audios)
-    padded_audio = torch.stack([torch.nn.functional.pad(a, (0, max_len - a.shape[-1])) for a in audios])
+        
+class Collator:
+    def __call__(self, batch):
+        # per-utterance lengths in frames (time axis = dim 1 of mel)
+        lengths = [b['mel'].shape[1] for b in batch]
+        max_T = max(lengths)
+        n_mels = batch[0]['mel'].shape[0]
 
-    input_ids = rnn.pad_sequence([b["input_ids"] for b in batch], batch_first=True, padding_value=0)
-    attention_mask = rnn.pad_sequence([b["attention_mask"] for b in batch], batch_first=True, padding_value=0)
-    return {"audio": padded_audio, "input_ids": input_ids, "attention_mask": attention_mask}
+        mels = torch.zeros(len(batch), n_mels, max_T)
+        texts = []
+        for i, b in enumerate(batch):
+            T = b['mel'].shape[1]
+            mels[i, :, :T] = b['mel']
+            texts.append(b['text'])
+
+        return {
+            'texts': texts,                                   # list[str]
+            'mels': mels,                                     # [B, n_mels, max_T]
+            'mel_lengths': torch.tensor(lengths, dtype=torch.long)  # [B]
+        }

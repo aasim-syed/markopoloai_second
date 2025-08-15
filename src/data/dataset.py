@@ -1,7 +1,6 @@
-import json, random
+﻿import json
 from dataclasses import dataclass
 from typing import List, Dict
-import numpy as np
 import torch
 from torch.utils.data import Dataset
 from ..utils.audio import load_audio, melspectrogram, MelConfig
@@ -29,23 +28,29 @@ class TTSDataset(Dataset):
     def __getitem__(self, idx):
         it = self.items[idx]
         y = load_audio(it.audio, sr=self.mel_cfg.sample_rate)
-        mel = melspectrogram(y, self.mel_cfg)
+        mel = melspectrogram(y, self.mel_cfg)  # [n_mels, T]
         text = to_phonemes(it.text) if self.use_phonemes else it.text
         return {
-            'text': text,
-            'mel': torch.tensor(mel, dtype=torch.float32),
-            'sr': self.mel_cfg.sample_rate
+            "text": text,
+            "mel": torch.tensor(mel, dtype=torch.float32),  # [n_mels, T]
+            "sr": self.mel_cfg.sample_rate,
         }
 
 class Collator:
     def __call__(self, batch: List[Dict]):
-        # Pad mel to max time
-        max_T = max(x['mel'].shape[1] for x in batch)
-        n_mels = batch[0]['mel'].shape[0]
+        lengths = [b["mel"].shape[1] for b in batch]  # per-item T
+        max_T = max(lengths)
+        n_mels = batch[0]["mel"].shape[0]
+
         mels = torch.zeros(len(batch), n_mels, max_T)
         texts = []
         for i, b in enumerate(batch):
-            T = b['mel'].shape[1]
-            mels[i, :, :T] = b['mel']
-            texts.append(b['text'])
-        return {'texts': texts, 'mels': mels}
+            T = b["mel"].shape[1]
+            mels[i, :, :T] = b["mel"]
+            texts.append(b["text"])
+
+        return {
+            "texts": texts,                                  # list[str]
+            "mels": mels,                                    # [B, n_mels, max_T]
+            "mel_lengths": torch.tensor(lengths, dtype=torch.long),  # [B]
+        }

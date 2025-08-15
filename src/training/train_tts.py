@@ -95,10 +95,19 @@ def main():
             input_ids = tok['input_ids'].to(device)
             attn = tok.get('attention_mask', None)
             if attn is not None: attn = attn.to(device)
+            amp_enabled = tcfg.get('mixed_precision', True) and (device == 'cuda')
 
-            with autocast(enabled=tcfg.get('mixed_precision', True)):
+
+            with autocast(enabled=amp_enabled):
                 pred_mel, disc_logits = model(input_ids, attn)
-                L_mel = mel_loss(pred_mel, mels)
+                lengths = batch.get('mel_lengths')
+                if lengths is None:
+                    lengths = torch.full((mels.size(0),), mels.size(2), dtype=torch.long, device=device)
+                else:
+                    lengths = lengths.to(device)
+
+                L_mel = mel_loss(pred_mel, mels, lengths)
+
                 target_accent = torch.ones(pred_mel.size(0), dtype=torch.long, device=device)  # BD=1
                 L_acc = bd_accent_loss(pred_mel, disc_logits, target_accent)
                 loss = L_mel + L_acc
@@ -149,7 +158,14 @@ def main():
                 attn = tok.get('attention_mask', None)
                 if attn is not None: attn = attn.to(device)
                 pred_mel, disc_logits = model(input_ids, attn)
-                val_loss += mel_loss(pred_mel, mels).item()
+                lengths = batch.get('mel_lengths')
+                if lengths is None:
+                    lengths = torch.full((mels.size(0),), mels.size(2), dtype=torch.long, device=device)
+                else:
+                    lengths = lengths.to(device)
+
+                val_loss += mel_loss(pred_mel, mels, lengths).item()
+
         val_loss /= max(1, len(dl_va))
         if tcfg.get('wandb', {}).get('enabled', False):
             wandb.log({'val/mel': val_loss, 'epoch': epoch}, step=global_step)
