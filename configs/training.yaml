@@ -15,10 +15,11 @@ max_steps: null
 
 # Progressive unfreezing schedule (epochs when to unfreeze blocks)
 progressive_unfreeze:
-  - { module: 'vits.text_encoder', epoch: 0 }
-  - { module: 'vits.duration_predictor', epoch: 2 }
-  - { module: 'vits.generator', epoch: 4 }
   - { module: 'adapter', epoch: 0 }
+  - { module: 'disc',    epoch: 0 }
+  # Then deeper VITS bits later if you want:
+  - { module: 'vits.text_encoder', epoch: 2 }
+  - { module: 'vits.generator',    epoch: 4 }
 
 # Paths
 output_dir: outputs/tts

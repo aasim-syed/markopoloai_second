@@ -1,0 +1,140 @@
+_wandb:
+    value:
+        cli_version: 0.21.1
+        e:
+            uxx6udzesu0tq8s28dm1xnqvfipbprnn:
+                args:
+                    - --train
+                    - configs/datasets.yaml
+                    - --cfg
+                    - configs/training.yaml
+                cpu_count: 6
+                cpu_count_logical: 12
+                cudaVersion: "12.5"
+                disk:
+                    /:
+                        total: "976754831360"
+                        used: "459022893056"
+                email: syedaasim133@gmail.com
+                executable: C:\Users\syeda\AppData\Local\Programs\Python\Python313\python.exe
+                git:
+                    commit: 75b528957414f40ec178839e887bf92e77c9ba74
+                    remote: https://github.com/aasim-syed/markopoloai_second.git
+                gpu: NVIDIA GeForce GTX 1650 Ti
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Turing
+                      cudaCores: 1024
+                      memoryTotal: "4294967296"
+                      name: NVIDIA GeForce GTX 1650 Ti
+                      uuid: GPU-41013696-eac3-a098-1972-e3d9a69c2a67
+                host: aasim
+                memory:
+                    total: "34143404032"
+                os: Windows-11-10.0.26100-SP0
+                program: -m src.training.train_tts
+                python: CPython 3.13.5
+                root: C:\Users\syeda\Downloads\bd_bangla_tts_finetune_100pct\bd_bangla_tts_finetune
+                startedAt: "2025-08-15T04:51:58.818717Z"
+                writerId: uxx6udzesu0tq8s28dm1xnqvfipbprnn
+        m: []
+        python_version: 3.13.5
+        t:
+            "1":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 71
+                - 105
+            "2":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 71
+                - 105
+            "3":
+                - 16
+            "4": 3.13.5
+            "5": 0.21.1
+            "6": 4.55.1
+            "8":
+                - 3
+            "12": 0.21.1
+            "13": windows-amd64
+accent_clf_ckpt:
+    value: outputs/accent_clf/random_forest.joblib
+baseline_manifest:
+    value: data/processed/valid_mixed.jsonl
+batch_size:
+    value: 16
+checkpoint_dir:
+    value: outputs/checkpoints
+eval_steps:
+    value: 100
+fmax:
+    value: 8000
+fmin:
+    value: 0
+gradient_accumulation_steps:
+    value: 4
+hop_length:
+    value: 256
+learning_rate:
+    value: 0.0001
+log_dir:
+    value: outputs/logs
+max_steps:
+    value: null
+mixed_precision:
+    value: true
+n_fft:
+    value: 1024
+n_mels:
+    value: 80
+num_epochs:
+    value: 20
+output_dir:
+    value: outputs/tts
+phonemizer_lang:
+    value: bn
+progressive_unfreeze:
+    value:
+        - epoch: 0
+          module: adapter
+        - epoch: 0
+          module: disc
+        - epoch: 2
+          module: vits.text_encoder
+        - epoch: 4
+          module: vits.generator
+project_name:
+    value: bd_bangla_tts
+sample_rate:
+    value: 22050
+save_steps:
+    value: 500
+save_strategy:
+    value: steps
+seed:
+    value: 42
+train_manifest:
+    value: data/processed/train_manifest.jsonl
+use_phonemes:
+    value: true
+valid_manifest:
+    value: data/processed/valid_manifest.jsonl
+wandb:
+    value:
+        enabled: true
+        entity: null
+        project: bd_bangla_tts
+warmup_steps:
+    value: 1000
+win_length:
+    value: 1024
