@@ -11,14 +11,14 @@ from ..vocoder.griffinlim import VocoderConfig, mel_db_to_audio
 from ..model.accent_classifier import predict_proba as rf_predict_proba
 from ..data.features import extract_accent_features
 
-
 def synth_to_mel(model: BDVitsModel, text: str, mel_cfg: MelConfig) -> np.ndarray:
-    """Run model(text) -> mel[dB]. BDVitsModel returns mel already."""
     device = next(model.parameters()).device
-    tok = model.tokenize([text])
+    tok = model.tokenize([text])  # model.tokenize already uses padding+truncation in our BDVitsModel
+    # If your BDVitsModel.tokenize didn't set truncation, you can replace with:
+    # tok = model.tokenizer([text], return_tensors='pt', padding=True, truncation=True)
     with torch.no_grad():
         mel_pred, _ = model(tok['input_ids'].to(device), tok.get('attention_mask', None))
-    return mel_pred.squeeze(0).detach().cpu().numpy()  # [n_mels, T] dB
+    return mel_pred.squeeze(0).detach().cpu().numpy()
 
 
 def mel_to_wav(mel_db: np.ndarray, sr: int = 22050) -> np.ndarray:

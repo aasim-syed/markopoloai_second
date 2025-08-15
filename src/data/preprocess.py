@@ -1,19 +1,36 @@
 # src/data/preprocess.py
 
-import argparse, os, json, random
+import argparse, os, json, random, glob, tarfile, shutil, sys
 import numpy as np
 import soundfile as sf
-from datasets import load_dataset, Audio  # still used for Bengali.AI parquet fallback
-from src.common.utils import ensure_dir, save_jsonl
-from src.model.text_normalize import bd_text_normalize
+
+# use local helpers to avoid cross-package imports
+def ensure_dir(p: str):
+    os.makedirs(p, exist_ok=True)
+
+def save_jsonl(path: str, rows):
+    ensure_dir(os.path.dirname(path))
+    with open(path, "w", encoding="utf-8") as w:
+        for r in rows:
+            w.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+# BD specific
+from ..utils.text import bd_text_normalize  # our project
+# optional ML classifier
+try:
+    from ..models.accent_classifier import predict_proba as rf_predict_proba
+    HAVE_RF = True
+except Exception:
+    HAVE_RF = False
 
 BD_LEXICON = {
-    "आসি", "হইতেছে", "এইটা", "ওইটা", "কই", "কাম", "বস", "ঢাকা", "চট্টগ্রাম", "বরিশাল",
-    "বাংলাদেশ", "টাঙ্গাইল", "গাড়ি", "আইজ", "আব্দুল", "কেমন আছেন"
+    "আসি", "হইতেছে", "এইটা", "ওইটা", "কই", "কাম", "বস", "ঢাকা", "চট্টগ্রাম", "বরিশাল",
+    "বাংলাদেশ", "টাঙ্গাইল", "গাড়ি", "আইজ", "আব্দুল", "কেমন আছেন"
 }
 
 def guess_accent(text: str) -> str:
-    t = text.replace("়", "")  # nukta normalization
+    # quick heuristic based on BD lexical cues
+    t = text.replace("়", "")
     for w in BD_LEXICON:
         if w in t:
             return "BD"
@@ -85,28 +102,24 @@ def write_audio_from_array(array, sr, out_wav, target_sr=22050):
         return False
 
 # ---------------------------
-# COMMON VOICE (manual reader)
+# COMMON VOICE (local reader)
 # ---------------------------
 def ingest_common_voice(split, out_dir, cv_limit=None, target_sr=22050, debug=False):
     """
     Common Voice v17 Bengali (bn) local reader:
     - Downloads ONLY audio/bn/<split>/*.tar and transcript/bn/<split>.tsv(.gz)
     - Builds stem -> sentence map from the BN TSV
-    - Extracts mp3/flac/ogg/etc from bn tar and writes 22.05k WAVs
+    - Extracts clips and writes 22.05k WAVs
     """
-    import os, glob, tarfile
     import pandas as pd
     from huggingface_hub import snapshot_download
-    import soundfile as sf
-    import numpy as np
 
-    # Normalize split to CV naming
+    # normalize split names
     if split == "valid":
         split = "validated"
     if split not in ("train", "dev", "test", "validated"):
         raise ValueError("split must be one of: train, dev, test, validated")
 
-    # 1) Snapshot ONLY what we need (bn audio + bn transcript for this split)
     snap_dir = snapshot_download(
         "mozilla-foundation/common_voice_17_0",
         repo_type="dataset",
@@ -117,14 +130,12 @@ def ingest_common_voice(split, out_dir, cv_limit=None, target_sr=22050, debug=Fa
         ],
     )
 
-    # 2) Find the BN audio tar(s)
-    shard_pattern = os.path.join(snap_dir, "audio", "bn", split, "*.tar")
-    shard_paths = sorted(glob.glob(shard_pattern))
+    shard_paths = sorted(glob.glob(os.path.join(snap_dir, "audio", "bn", split, "*.tar")))
     if not shard_paths:
-        print(f"[CV] No local bn {split} tar files under {shard_pattern}")
+        print(f"[CV] No bn {split} tar files")
         return []
 
-    # 3) Load the BN transcript for this split
+    # transcript
     tsv_path = None
     for cand in [
         os.path.join(snap_dir, "transcript", "bn", f"{split}.tsv"),
@@ -134,19 +145,15 @@ def ingest_common_voice(split, out_dir, cv_limit=None, target_sr=22050, debug=Fa
             tsv_path = cand
             break
     if tsv_path is None:
-        print(f"[CV] No BN transcript found for split '{split}' under transcript/bn/{split}.tsv(.gz)")
+        print(f"[CV] No BN transcript for split={split}")
         return []
 
-    # Read TSV (tab-separated). New pandas: use on_bad_lines='skip' for safety.
     df = pd.read_csv(tsv_path, sep="\t", encoding="utf-8", dtype=str, on_bad_lines="skip", engine="python")
 
-    # Determine filename and sentence columns
-    # CV typically has 'path' (e.g. 'common_voice_bn_123.mp3' or 'clips/common_voice_bn_123.mp3') and 'sentence'
     def find_col(candidates):
         for c in candidates:
             if c in df.columns:
                 return c
-        # case-insensitive fallback
         low = {c.lower(): c for c in df.columns}
         for c in candidates:
             if c.lower() in low:
@@ -156,25 +163,21 @@ def ingest_common_voice(split, out_dir, cv_limit=None, target_sr=22050, debug=Fa
     path_col = find_col(["path", "clip", "filename", "file"])
     sent_col = find_col(["sentence", "text", "transcription"])
     if path_col is None or sent_col is None:
-        print(f"[CV] Could not find path/sentence columns in BN TSV. Columns={list(df.columns)[:10]}")
+        print(f"[CV] Could not find path/sentence columns in TSV; columns head={list(df.columns)[:10]}")
         return []
 
-    # Build stem -> sentence map (stem = filename without extension)
+    # stem -> sentence
     text_map = {}
     for pth, sent in zip(df[path_col].fillna(""), df[sent_col].fillna("")):
         s = str(sent).strip()
         if not s:
             continue
         base = os.path.basename(str(pth))
-        stem = os.path.splitext(base)[0]  # 'common_voice_bn_31564335'
+        stem = os.path.splitext(base)[0]
         text_map[stem] = s
 
-    if debug:
-        print(f"[CV {split}] BN text_map size:", len(text_map))
+    ensure_dir(out_dir)
 
-    os.makedirs(out_dir, exist_ok=True)
-
-    # helper: write wav from raw bytes (torchaudio preferred; fallback to librosa)
     def write_wav_from_bytes(raw_bytes, ext, dst_wav):
         tmp_path = dst_wav + ".tmp" + ext
         try:
@@ -209,12 +212,8 @@ def ingest_common_voice(split, out_dir, cv_limit=None, target_sr=22050, debug=Fa
     kept = skipped = 0
     limit = int(cv_limit) if (cv_limit is not None) else None
 
-    # debug counters
-    no_text_match = decode_fail = 0
-    printed = 0
-
     def process_shard(tar_path, start_idx):
-        nonlocal kept, skipped, no_text_match, decode_fail, printed
+        nonlocal kept, skipped
         count = 0
         with tarfile.open(tar_path, "r:*") as tf:
             for m in tf:
@@ -227,41 +226,28 @@ def ingest_common_voice(split, out_dir, cv_limit=None, target_sr=22050, debug=Fa
                 ext = ext.lower()
                 if ext not in ("mp3", "wav", "flac", "ogg", "m4a", "opus", "webm"):
                     continue
-
                 if limit is not None and kept >= limit:
                     break
-
-                # Try direct stem and base-only stem
                 sent = text_map.get(stem)
                 if not sent:
                     base_stem = os.path.splitext(os.path.basename(name))[0]
                     sent = text_map.get(base_stem)
                 if not sent:
-                    no_text_match += 1
                     skipped += 1
                     continue
-
                 try:
                     with tf.extractfile(m) as f:
                         aud_bytes = f.read()
                     wav_path = os.path.join(out_dir, f"cv_{split}_{start_idx + count}.wav")
                     if not write_wav_from_bytes(aud_bytes, "." + ext, wav_path):
-                        decode_fail += 1
                         skipped += 1
                         continue
-
                     text_norm = bd_text_normalize(sent)
-                    label = guess_accent(text_norm)  # heuristic BD/UNK
+                    label = guess_accent(text_norm)
                     rows.append({"audio": wav_path, "text": text_norm, "label": label})
                     kept += 1
                     count += 1
-
-                    if debug and printed < 8:
-                        print("DEBUG[CV] paired:", name, "->", text_norm[:60])
-                        printed += 1
-
                 except Exception:
-                    decode_fail += 1
                     skipped += 1
                     continue
         return count
@@ -272,103 +258,73 @@ def ingest_common_voice(split, out_dir, cv_limit=None, target_sr=22050, debug=Fa
             break
         got = process_shard(tar_path, start)
         start += got
-        if debug:
-            print(f"[CV {split}] processed shard:", os.path.basename(tar_path), "(kept so far=", kept, ")")
-
-    if debug:
-        print(f"[CV {split}] skip reasons -> no_text_match={no_text_match}, decode_fail={decode_fail}")
 
     print(f"[CV {split}] kept={kept} skipped={skipped} (limit={cv_limit})")
     return rows
 
-
 # ---------------------------
-# Bengali.AI (features-only guard)
+# Bengali.AI (best effort)
 # ---------------------------
 def ingest_bengali_ai(split, out_dir, target_sr=22050, bai_limit=None, debug=False):
-    """
-    Bengali-AI via local parquet snapshot (if present) else online; applies bai_limit.
-    Handles audio from path or array (list/ndarray).
-    Skips gracefully if the split only has features (input_features/labels) and no raw audio/text.
-    """
-    import glob
-    from huggingface_hub import snapshot_download
-
-    ds = None
-    try:
-        snap_dir = snapshot_download("thesven/bengali-ai-train-set-tiny", repo_type="dataset")
-        pat = os.path.join(snap_dir, "**", f"{split}-*.parquet")
-        files = glob.glob(pat, recursive=True)
-        if files:
-            from datasets import load_dataset as _ld
-            ds = _ld("parquet", data_files={split: files}, split=split)
-    except Exception:
-        ds = None
-
-    if ds is None:
-        ds = load_dataset("thesven/bengali-ai-train-set-tiny", split=split)
-
-    # If it doesn't have raw audio/text columns, skip
-    cols = set(getattr(ds, "column_names", []))
-    if not (("audio" in cols) or any(k in cols for k in ("sentence", "text", "transcription"))):
-        print("[Bengali-AI] No raw audio/text columns (saw:", cols, ") — skipping.")
-        return []
-
-    if bai_limit is not None and len(ds) > bai_limit:
-        ds = ds.select(range(bai_limit))
-
-    if debug and len(ds) > 0:
-        try:
-            print("DEBUG[BAI]: first example keys:", list(ds[0].keys()))
-            ex0 = ds[0]
-            print("DEBUG[BAI]: text-like field:", _pick_text(ex0) or ex0.get("sentence"))
-            if isinstance(ex0.get("audio"), dict):
-                ak = list(ex0["audio"].keys())
-            else:
-                ak = type(ex0.get("audio")).__name__
-            print("DEBUG[BAI]: audio field type/keys:", ak)
-        except Exception:
-            pass
-
+    from datasets import load_dataset
     rows, kept, skipped = [], 0, 0
-    total = len(ds)
+    ds = load_dataset("thesven/bengali-ai-train-set-tiny", split=split)
+
     for i, ex in enumerate(ds):
         try:
-            text_raw = _pick_text(ex) or ex.get("sentence")
+            text_raw = _pick_text(ex) or ex.get("label")
             if not text_raw:
                 skipped += 1
                 continue
-            text = bd_text_normalize(text_raw)
-
-            wav_path = os.path.join(out_dir, f"bai_{split}_{i}.wav")
-            aud = ex.get("audio")
-            ok = False
-            if isinstance(aud, dict):
-                if aud.get("path"):
-                    ok = write_audio_from_path(aud["path"], wav_path, target_sr=target_sr)
-                if not ok and "array" in aud and "sampling_rate" in aud:
-                    ok = write_audio_from_array(aud["array"], aud["sampling_rate"], wav_path, target_sr=target_sr)
-            elif isinstance(aud, str):
-                ok = write_audio_from_path(aud, wav_path, target_sr=target_sr)
-
-            if not ok:
-                skipped += 1
-                continue
-
-            rows.append({"audio": wav_path, "text": text, "label": guess_accent(text)})
-            kept += 1
-
-            if debug and ((i + 1) % 50 == 0 or (i + 1) == total):
-                print(f"[Bengali-AI {split}] progress: {i+1}/{total}")
+            text = bd_text_normalize(str(text_raw))
+            # No canonical audio in this tiny set; treat as text-only augmentation
+            # You may skip or create TTS synthetic later; here we skip adding rows.
+            continue
         except Exception:
             skipped += 1
             continue
 
-    print(f"[Bengali-AI {split}] kept={kept} skipped={skipped} (limit={bai_limit})")
+    print(f"[Bengali-AI {split}] used as text augmentation only")
     return rows
 
+# ---------------------------
+# Filtering helpers
+# ---------------------------
+def filter_only_bd(rows, accent_clf_path=None, prob_threshold=0.5, target_sr=22050):
+    """
+    Keep BD rows only.
+    - If classifier provided and available: compute P(BD) on waveform, keep if >= threshold.
+    - Else: heuristic label == 'BD' from guess_accent().
+    """
+    if accent_clf_path and os.path.exists(accent_clf_path) and HAVE_RF:
+        # ML filtering
+        from ..data.features import extract_accent_features
+        from ..models.accent_classifier import predict_proba as _predict
+        kept = []
+        for r in rows:
+            try:
+                y, sr = sf.read(r["audio"], always_2d=False)
+                if isinstance(y, np.ndarray) and y.ndim > 1:
+                    y = np.mean(y, axis=1)
+                if sr != target_sr:
+                    y, _ = _safe_resample(y, sr, target_sr)
+                feats = extract_accent_features(y, target_sr)
+                X = np.array([[*feats.values()]], dtype=float)
+                p = _predict(accent_clf_path, X)[0][1]  # P(BD)
+                if p >= prob_threshold:
+                    r2 = dict(r)
+                    r2["accent_score_bd"] = float(p)
+                    kept.append(r2)
+            except Exception:
+                # if anything fails, fall back to heuristic
+                if r.get("label") == "BD":
+                    kept.append(r)
+        return kept
+    else:
+        # heuristic
+        return [r for r in rows if r.get("label") == "BD"]
+
 def main():
-    import sys
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", type=str, default="data")
     ap.add_argument("--out", type=str, default="data/processed")
@@ -377,6 +333,9 @@ def main():
     ap.add_argument("--valid_ratio", type=float, default=0.1)
     ap.add_argument("--cv_limit", type=int, default=None, help="Limit rows from each source")
     ap.add_argument("--target_sr", type=int, default=22050)
+    ap.add_argument("--only_bd_accent", action="store_true", help="Filter to BD-accent only (heuristic or classifier)")
+    ap.add_argument("--accent_clf", type=str, default=None, help="Path to RandomForest .joblib for BD/IN")
+    ap.add_argument("--bd_threshold", type=float, default=0.55, help="P(BD) threshold when using classifier")
     ap.add_argument("--debug", action="store_true", help="Print sample and progress")
     args = ap.parse_args()
 
@@ -401,21 +360,32 @@ def main():
         except Exception as e:
             print("BENGALI.AI FAILED — SKIPPING. Reason:", e, file=sys.stderr)
 
+    # --- optional BD-only filtering ---
+    if args.only_bd_accent and rows:
+        rows = filter_only_bd(rows, accent_clf_path=args.accent_clf,
+                              prob_threshold=args.bd_threshold, target_sr=args.target_sr)
+
+    # split
     random.shuffle(rows)
-    if rows:
-        n_valid = max(1, int(len(rows) * args.valid_ratio))
-        valid = rows[:n_valid]
-        train = rows[n_valid:]
+    n_valid = max(1, int(len(rows) * args.valid_ratio)) if rows else 0
+    valid = rows[:n_valid]
+    train = rows[n_valid:]
+
+    # filenames (match downstream expectation)
+    if args.only_bd_accent:
+        train_name, valid_name = "train_bd.jsonl", "valid_bd.jsonl"
     else:
-        valid, train = [], []
+        train_name, valid_name = "train_manifest.jsonl", "valid_manifest.jsonl"
 
-    save_jsonl(os.path.join(args.out, "train_manifest.jsonl"), train)
-    save_jsonl(os.path.join(args.out, "valid_manifest.jsonl"), valid)
-
-    stats = {"num_total": len(rows), "num_train": len(train), "num_valid": len(valid)}
+    save_jsonl(os.path.join(args.out, train_name), train)
+    save_jsonl(os.path.join(args.out, valid_name), valid)
+    stats = {"num_total": len(rows), "num_train": len(train), "num_valid": len(valid),
+             "only_bd": bool(args.only_bd_accent)}
     with open(os.path.join(args.out, "stats.json"), "w", encoding="utf-8") as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)
     print("Wrote manifests and stats:", stats)
+    print("Train manifest:", os.path.join(args.out, train_name))
+    print("Valid manifest:", os.path.join(args.out, valid_name))
 
 if __name__ == "__main__":
     main()

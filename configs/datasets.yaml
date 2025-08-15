@@ -1,6 +1,6 @@
 # Manifests produced by scripts in src/data/*.py
-train_manifest: data/processed/train_bd.jsonl
-valid_manifest: data/processed/valid_bd.jsonl
+train_manifest: data/processed/train_manifest.jsonl
+valid_manifest: data/processed/valid_manifest.jsonl
 # Optional baseline (mixed accent) for comparison
 baseline_manifest: data/processed/valid_mixed.jsonl
 
