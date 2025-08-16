@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 import librosa, numpy as np
-import torch
 
 @dataclass
 class MelConfig:
@@ -23,12 +22,3 @@ def melspectrogram(y: np.ndarray, cfg: MelConfig) -> np.ndarray:
     )
     S_db = librosa.power_to_db(S, ref=np.max)
     return S_db
-
-def f0_contour(y: np.ndarray, sr: int) -> np.ndarray:
-    f0 = librosa.yin(y, fmin=50, fmax=400, sr=sr)
-    return f0
-
-def spectral_convergence(pred: np.ndarray, target: np.ndarray) -> float:
-    num = np.linalg.norm(target - pred)
-    den = np.linalg.norm(target) + 1e-8
-    return float(num / den)

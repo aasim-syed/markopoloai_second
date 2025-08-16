@@ -1,74 +1,69 @@
-import os, argparse, json, numpy as np
-import librosa
-import torch
-from src.utils.audio import MelConfig, melspectrogram, load_audio, f0_contour
-from src.utils.metrics import mel_spectral_distance, f0_correlation, spectral_convergence
-from src.model.bd_vits import BDVitsModel
-from src.data.features import extract_accent_features  # used only if accent_clf provided
+import argparse, json, numpy as np, torch, librosa
+from ..model.bd_vits import BDVitsModel
+from ..utils.audio import MelConfig, melspectrogram, load_audio
+from ..utils.metrics import mel_spectral_distance, f0_correlation, spectral_convergence
+from ..vocoder.griffinlim import VocoderConfig, mel_db_to_audio
 
-def evaluate_pair(model, text: str, ref_audio_path: str, mel_cfg: MelConfig, accent_clf=None):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = model.to(device).eval()
+def eval_one(model, text: str, ref_wav: str, sr: int):
+    device = next(model.parameters()).device
+    # predict mel
     tok = model.tokenize([text])
+    tok = {k: v.to(device) for k, v in tok.items()}
     with torch.no_grad():
-        mel_pred, _ = model(tok['input_ids'].to(device), tok.get('attention_mask', None))
+        mel_pred = model(tok['input_ids'], tok.get('attention_mask'))  # [1, n_mels, T]
     mel_pred = mel_pred.squeeze(0).detach().cpu().numpy()
 
-    y = load_audio(ref_audio_path, sr=mel_cfg.sample_rate)
-    mel_ref = melspectrogram(y, mel_cfg)
-    f0_ref = f0_contour(y, mel_cfg.sample_rate)
-    f0_pred = f0_ref[:len(f0_ref)]  # placeholder
+    # ref mel + audio
+    mel_cfg = MelConfig(sample_rate=sr)
+    y_ref = load_audio(ref_wav, sr=sr)
+    mel_ref = melspectrogram(y_ref, mel_cfg)
 
-    out = {
-        'mel_spectral_distance': mel_spectral_distance(mel_pred, mel_ref),
-        'spectral_convergence': spectral_convergence(mel_pred, mel_ref),
-        'f0_correlation': f0_correlation(f0_pred, f0_ref),
-    }
+    # vocode pred to waveform for f0
+    vcfg = VocoderConfig(sample_rate=sr)
+    y_pred = mel_db_to_audio(mel_pred, vcfg)
 
-    if accent_clf is not None:
-        import numpy as np
-        feats = extract_accent_features(y, mel_cfg.sample_rate)
-        X = np.array([list(feats.values())], dtype=float)
-        proba = accent_clf.predict_proba(X)[0]
-        out['accent_score_ref_bd'] = float(proba[1]) if len(proba) == 2 else float(proba[-1])
+    # metrics
+    msd = mel_spectral_distance(mel_pred, mel_ref)
+    sc = spectral_convergence(mel_pred, mel_ref)
+    # robust f0 correlation
+    f0_p = librosa.yin(y_pred, fmin=50, fmax=400, sr=sr)
+    f0_r = librosa.yin(y_ref, fmin=50, fmax=400, sr=sr)
+    L = min(len(f0_p), len(f0_r))
+    f0c = 0.0 if L < 2 else float(np.corrcoef(f0_p[:L], f0_r[:L])[0,1])
 
-    return out
+    return {'mel_spectral_distance': float(msd), 'spectral_convergence': float(sc), 'f0_correlation': float(f0c)}
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--manifest', required=True)
-    ap.add_argument('--ckpt', default='outputs/checkpoints/best.pt')
+    ap.add_argument('--ckpt', default='outputs/checkpoints/epoch_0.pt')
+    ap.add_argument('--manifest', default='data/processed/valid_bd.jsonl')  # jsonl with {"audio","text","sr"}
     ap.add_argument('--out', default='outputs/eval_metrics.json')
-    ap.add_argument('--sr', type=int, default=22050)
-    ap.add_argument('--accent_clf', default=None)
     args = ap.parse_args()
 
-    mel_cfg = MelConfig(sample_rate=args.sr)
-    model = BDVitsModel()
-    if args.ckpt and args.ckpt.endswith('.pt') and os.path.exists(args.ckpt):
-        sd = torch.load(args.ckpt, map_location='cpu')
-        model.load_state_dict(sd['model'], strict=False)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = BDVitsModel().to(device).eval()
+    sd = torch.load(args.ckpt, map_location=device)
+    model.load_state_dict(sd['model'], strict=False)
 
-    clf = None
-    if args.accent_clf and os.path.exists(args.accent_clf):
-        import joblib
-        clf = joblib.load(args.accent_clf)
-
-    metrics = []
-    with open(args.manifest, 'r', encoding='utf-8') as f:
+    per = []
+    with open(args.manifest, 'r', encoding='utf-8-sig') as f:
         for i, line in enumerate(f):
-            j = json.loads(line)
-            m = evaluate_pair(model, j['text'], j['audio'], mel_cfg, accent_clf=clf)
+            j = json.loads(line.strip())
+            sr = int(j.get('sr', model.sample_rate))
+            m = eval_one(model, j['text'], j['audio'], sr)
             m['idx'] = i
-            metrics.append(m)
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+            per.append(m)
+
+    out = {
+        'avg_msd': float(np.mean([x['mel_spectral_distance'] for x in per])) if per else None,
+        'avg_sc': float(np.mean([x['spectral_convergence'] for x in per])) if per else None,
+        'avg_f0_corr': float(np.mean([x['f0_correlation'] for x in per])) if per else None,
+        'per_item': per,
+    }
+    import os
+    os.makedirs('outputs', exist_ok=True)
     with open(args.out, 'w', encoding='utf-8') as w:
-        json.dump({
-            'avg_msd': float(np.mean([m['mel_spectral_distance'] for m in metrics])),
-            'avg_sc': float(np.mean([m['spectral_convergence'] for m in metrics])),
-            'avg_f0_corr': float(np.mean([m['f0_correlation'] for m in metrics])),
-            'per_item': metrics
-        }, w, indent=2, ensure_ascii=False)
+        json.dump(out, w, indent=2, ensure_ascii=False)
     print('Saved metrics to', args.out)
 
 if __name__ == '__main__':

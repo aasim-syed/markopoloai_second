@@ -1,15 +1,16 @@
+# Manifests
 train_manifest: data/processed/train_bd.jsonl
 valid_manifest: data/processed/valid_bd.jsonl
-baseline_manifest: data/processed/valid_bd.jsonl
 
-# Use the SR printed in step 1 (MMS is typically 16000)
-sample_rate: 16000
+# Audio params
+sample_rate: 22050
 n_mels: 80
 fmin: 0
-fmax: 7600         # ~Nyquist minus a bit for 16 kHz
+fmax: 8000
 n_fft: 1024
 hop_length: 256
 win_length: 1024
 
-use_phonemes: false     # <- disables espeak/phonemizer entirely
+# Tokenization / phonemes
+use_phonemes: false
 phonemizer_lang: bn

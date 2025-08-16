@@ -1,85 +1,13 @@
 {
-  "avg_msd": 25.313489046963777,
-  "avg_sc": 0.39502887563271954,
-  "avg_f0_corr": -0.015353249602195517,
-  "avg_accent_score_bd": null,
+  "avg_msd": 24.88031005859375,
+  "avg_sc": 0.44188937544822693,
+  "avg_f0_corr": 0.03039118077528359,
   "per_item": [
     {
-      "mel_spectral_distance": 25.25188446044922,
-      "spectral_convergence": 0.42188090085983276,
-      "f0_correlation": 0.004394269326896094,
-      "accent_score_bd": null,
+      "mel_spectral_distance": 24.88031005859375,
+      "spectral_convergence": 0.44188937544822693,
+      "f0_correlation": 0.03039118077528359,
       "idx": 0
-    },
-    {
-      "mel_spectral_distance": 24.278562545776367,
-      "spectral_convergence": 0.4019874632358551,
-      "f0_correlation": 0.028964815619016104,
-      "accent_score_bd": null,
-      "idx": 1
-    },
-    {
-      "mel_spectral_distance": 22.248031616210938,
-      "spectral_convergence": 0.3615957796573639,
-      "f0_correlation": -0.0878524410229219,
-      "accent_score_bd": null,
-      "idx": 2
-    },
-    {
-      "mel_spectral_distance": 25.071735382080078,
-      "spectral_convergence": 0.3821847438812256,
-      "f0_correlation": -0.004828059846906567,
-      "accent_score_bd": null,
-      "idx": 3
-    },
-    {
-      "mel_spectral_distance": 24.84639549255371,
-      "spectral_convergence": 0.37564966082572937,
-      "f0_correlation": 0.006835762759038594,
-      "accent_score_bd": null,
-      "idx": 4
-    },
-    {
-      "mel_spectral_distance": 30.5737247467041,
-      "spectral_convergence": 0.41715824604034424,
-      "f0_correlation": -0.09355011908608558,
-      "accent_score_bd": null,
-      "idx": 5
-    },
-    {
-      "mel_spectral_distance": 26.4849853515625,
-      "spectral_convergence": 0.40680551528930664,
-      "f0_correlation": -0.08152529576552336,
-      "accent_score_bd": null,
-      "idx": 6
-    },
-    {
-      "mel_spectral_distance": 23.822309494018555,
-      "spectral_convergence": 0.36871182918548584,
-      "f0_correlation": 0.005809558600256614,
-      "accent_score_bd": null,
-      "idx": 7
-    },
-    {
-      "mel_spectral_distance": 22.810171127319336,
-      "spectral_convergence": 0.37243542075157166,
-      "f0_correlation": -0.11063230194519744,
-      "accent_score_bd": null,
-      "idx": 8
-    },
-    {
-      "mel_spectral_distance": 26.25768280029297,
-      "spectral_convergence": 0.4018155038356781,
-      "f0_correlation": -0.0653123067924908,
-      "accent_score_bd": null,
-      "idx": 9
-    },
-    {
-      "mel_spectral_distance": 26.80289649963379,
-      "spectral_convergence": 0.435092568397522,
-      "f0_correlation": 0.22881037252976758,
-      "accent_score_bd": null,
-      "idx": 10
     }
   ]
 }
