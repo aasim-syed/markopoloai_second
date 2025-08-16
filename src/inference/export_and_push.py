@@ -1,6 +1,6 @@
 import argparse, torch
 from huggingface_hub import HfApi, create_repo
-from ..models.bd_vits import BDVitsModel
+from ..model.bd_vits import BDVitsModel
 
 
 def main():

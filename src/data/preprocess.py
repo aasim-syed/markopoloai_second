@@ -18,7 +18,7 @@ def save_jsonl(path: str, rows):
 from ..utils.text import bd_text_normalize  # our project
 # optional ML classifier
 try:
-    from ..models.accent_classifier import predict_proba as rf_predict_proba
+    from ..model.accent_classifier import predict_proba as rf_predict_proba
     HAVE_RF = True
 except Exception:
     HAVE_RF = False
@@ -299,7 +299,7 @@ def filter_only_bd(rows, accent_clf_path=None, prob_threshold=0.5, target_sr=220
     if accent_clf_path and os.path.exists(accent_clf_path) and HAVE_RF:
         # ML filtering
         from ..data.features import extract_accent_features
-        from ..models.accent_classifier import predict_proba as _predict
+        from ..model.accent_classifier import predict_proba as _predict
         kept = []
         for r in rows:
             try:

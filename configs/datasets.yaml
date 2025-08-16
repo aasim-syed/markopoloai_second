@@ -1,18 +1,15 @@
-# Manifests produced by scripts in src/data/*.py
 train_manifest: data/processed/train_bd.jsonl
 valid_manifest: data/processed/valid_bd.jsonl
-# Optional baseline (mixed accent) for comparison
-baseline_manifest: data/processed/valid_mixed.jsonl
+baseline_manifest: data/processed/valid_bd.jsonl
 
-# Audio params
-sample_rate: 22050
+# Use the SR printed in step 1 (MMS is typically 16000)
+sample_rate: 16000
 n_mels: 80
 fmin: 0
-fmax: 8000
+fmax: 7600         # ~Nyquist minus a bit for 16 kHz
 n_fft: 1024
 hop_length: 256
 win_length: 1024
 
-# Tokenization / phonemes
-use_phonemes: false
+use_phonemes: false     # <- disables espeak/phonemizer entirely
 phonemizer_lang: bn
